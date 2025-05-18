@@ -67,9 +67,22 @@ export default function FileDetailPage() {
                 <div className="mb-2 text-sm text-gray-600">
                   <strong>Page {page.page_number}</strong>
                 </div>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2">
-                  {page.text.length > 500 ? page.text.slice(0, 500) + "..." : page.text}
-                </p>
+                <div className="flex gap-4 mb-2 items-start">
+                  <img
+                    src={`http://localhost:8000/previews/${name}-page${page.page_number}.png`}
+                    alt={`Page ${page.page_number} Preview`}
+                    style={{
+                      width: "120px",
+                      minWidth: "80px",
+                      borderRadius: "8px",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.10)"
+                    }}
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2 flex-1">
+                    {page.text.length > 500 ? page.text.slice(0, 500) + "..." : page.text}
+                  </p>
+                </div>
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"

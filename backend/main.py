@@ -1,24 +1,35 @@
 # // backend/main.py
+
+import os
+import re
+import hashlib
+import tempfile
+from pathlib import Path
+from typing import List, Optional
+
+import fitz  # PyMuPDF
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-import os
-import fitz  # PyMuPDF
-from pathlib import Path
-from typing import List, Optional
-import hashlib
-import tempfile
+from fastapi.staticfiles import StaticFiles
 
-from models import Page
-from database import init_db, get_session
 from sqlmodel import SQLModel, select
 from pydantic import BaseModel
 
+from models import Page
+from database import init_db, get_session
 from embedding import get_embedding
 from faiss_index import PageIndex
-import numpy as np
+from pdf_preview import render_page_preview
+
+# Ensure the preview directory exists BEFORE mounting as static
+os.makedirs("uploads/previews", exist_ok=True)
 
 app = FastAPI()
+
+# Serve PNG previews at /previews/*
+app.mount("/previews", StaticFiles(directory="uploads/previews"), name="previews")
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,56 +61,45 @@ class ExportRequest(BaseModel):
     order: List[int]
     title: Optional[str] = None
 
-@app.post("/upload")
+@app.post("/upload_pdf/")
 async def upload_pdf(file: UploadFile = File(...)):
-    file_location = UPLOAD_DIR / file.filename
-    file_location.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(file_location, "wb") as f:
-        f.write(await file.read())
-
-    # Extract folder-based tags from file path (if available)
-    path_parts = Path(file.filename).parts
-    folder_tags = [part for part in path_parts[:-1] if "." not in part]
-    tag_string = ", ".join(folder_tags)
+    # Save uploaded file
+    file_location = f"uploads/{file.filename}"
+    with open(file_location, "wb") as f_out:
+        content = await file.read()
+        f_out.write(content)
 
     doc = fitz.open(file_location)
     session = get_session()
-    pages = []
 
     for i in range(doc.page_count):
         page_obj = doc[i]
         text = page_obj.get_text()
-        is_image_heavy = len(text.strip()) < 40 and len(page_obj.get_images(full=True)) > 0
+        text = clean_pdf_text(text)
+        images = page_obj.get_images(full=True)
+        is_image_heavy = len(images) > 0
 
+        tags = []
         if is_image_heavy:
-            summary = "[Image-heavy page — pending AI captioning]"
-            embedding = None
-        else:
-            summary = text
+            tags.append("image_heavy")
+
+        # --- NEW EMBEDDING LOGIC ---
+        if text:
             embedding = get_embedding(text)
+        else:
+            embedding = None
 
         page = Page(
             pdf_name=file.filename,
             page_number=i + 1,
-            text=summary,
+            text=text,
             embedding=",".join(map(str, embedding)) if embedding else None,
-            tags=tag_string + (", image-heavy" if is_image_heavy else "")
+            tags=",".join(tags) if tags else None,
         )
         session.add(page)
-        session.flush()
-        if embedding:
-            index.add(page, embedding)
-        pages.append(summary)
 
     session.commit()
-
-    metadata = {
-        "filename": file.filename,
-        "page_count": doc.page_count,
-        "pages": pages[:3]
-    }
-    return metadata
+    return {"status": "success", "pages_processed": doc.page_count}
 
 @app.get("/tags")
 def list_all_tags():
@@ -268,3 +268,25 @@ def get_graph():
                 edges.append({"data": {"source": f"page-{p.id}", "target": tag_id}})
 
     return JSONResponse(content={"nodes": nodes, "edges": edges})
+
+@app.get("/render_preview/")
+def render_preview(pdf_name: str = Query(...), page: int = Query(...)):
+    pdf_path = os.path.join("uploads", pdf_name)
+    if not os.path.exists(pdf_path):
+        return {"error": "PDF not found"}
+    image_path = render_page_preview(pdf_path, page)
+    return FileResponse(image_path)
+
+def clean_pdf_text(text):
+    # 1. Collapse "vertical" letter stacks: C\nH\nA\nP\nT\nE\nR\n3 => CHAPTER 3
+    def fix_vertical(match):
+        return ''.join(line.strip() for line in match.group(0).split('\n') if line.strip()) + '\n'
+    text = re.sub(r'((?:^[A-Z0-9]\n){2,})', fix_vertical, text, flags=re.MULTILINE)
+    
+    # 2. Replace 2+ newlines with just one (normalize spacing)
+    text = re.sub(r'\n{2,}', '\n', text)
+    
+    # 3. Optionally, collapse single newlines in middle of sentences (for extra aggressive cleaning)
+    # text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+    
+    return text.strip()

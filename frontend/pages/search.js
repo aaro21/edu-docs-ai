@@ -112,14 +112,27 @@ export default function SearchPage() {
     return (
       <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
         {page ? (
-          <>
-            <div className="text-sm text-gray-800 font-medium">
-              📘 {page.pdf_name} — Page {page.page_number}
+          <div className="flex items-start gap-3">
+            <img
+              src={`http://localhost:8000/previews/${page.pdf_name}-page${page.page_number}.png`}
+              alt="PDF Page Preview"
+              style={{
+                width: "80px",
+                minWidth: "60px",
+                borderRadius: "6px",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.07)"
+              }}
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+            <div>
+              <div className="text-sm text-gray-800 font-medium">
+                📘 {page.pdf_name} — Page {page.page_number}
+              </div>
+              <div className="text-sm text-gray-600 italic mt-1">
+                {page.text.length > 150 ? page.text.slice(0, 150) + "..." : page.text}
+              </div>
             </div>
-            <div className="text-sm text-gray-600 italic mt-1">
-              {page.text.length > 150 ? page.text.slice(0, 150) + "..." : page.text}
-            </div>
-          </>
+          </div>
         ) : (
           <div className="text-sm text-gray-500">Loading...</div>
         )}
@@ -231,9 +244,22 @@ export default function SearchPage() {
                   Select
                 </label>
               </div>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2">
-                {r.text.length > 500 ? r.text.slice(0, 500) + "..." : r.text}
-              </p>
+              <div className="flex gap-4 mb-2 items-start">
+                <img
+                  src={`http://localhost:8000/previews/${r.pdf_name}-page${r.page_number}.png`}
+                  alt="PDF Preview"
+                  style={{
+                    width: "120px",
+                    minWidth: "80px",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.10)"
+                  }}
+                  onError={e => { e.target.style.display = 'none'; }}
+                />
+                <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2 flex-1">
+                  {r.text.length > 500 ? r.text.slice(0, 500) + "..." : r.text}
+                </p>
+              </div>
               <div className="flex gap-2 items-center">
                 <input
                   type="text"
