@@ -6,3 +6,4 @@ PyMuPDF
 requests
 python-dotenv
 faiss-cpu
+openai

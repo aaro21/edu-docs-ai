@@ -27,3 +27,7 @@ class PageIndex:
                     "text": text
                 })
         return results
+
+    def clear(self):
+        self.index = faiss.IndexFlatL2(1536)
+        self.page_map = []

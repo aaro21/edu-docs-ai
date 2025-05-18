@@ -1,26 +1,23 @@
-# backend/embedding.py
 import os
-import requests
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
+AZURE_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = "https://roberts-openi.openai.azure.com/"
+AZURE_OPENAI_EMBED_DEPLOYMENT = os.environ.get("AZURE_OPENAI_EMBED_DEPLOYMENT", "text-embedding-3-small")
+AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
 
-headers = {
-    "Content-Type": "application/json",
-    "api-key": AZURE_API_KEY
-}
+client = OpenAI(
+    api_key=AZURE_OPENAI_API_KEY,
+    base_url=f"{AZURE_OPENAI_ENDPOINT}openai/deployments/{AZURE_OPENAI_EMBED_DEPLOYMENT}/",
+    default_query={"api-version": AZURE_OPENAI_API_VERSION},
+)
 
 def get_embedding(text: str) -> list[float]:
-    url = f"{AZURE_ENDPOINT}/openai/deployments/{AZURE_DEPLOYMENT}/embeddings?api-version={AZURE_API_VERSION}"
-    payload = {
-        "input": text,
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    embedding = response.json()["data"][0]["embedding"]
-    return embedding
+    response = client.embeddings.create(
+        model=AZURE_OPENAI_EMBED_DEPLOYMENT,
+        input=[text],
+    )
+    return response.data[0].embedding

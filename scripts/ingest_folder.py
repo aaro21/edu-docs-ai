@@ -3,7 +3,7 @@ import requests
 from pathlib import Path
 
 API_URL = "http://localhost:8000/upload_pdf/"
-ROOT_DIR = Path("/Users/aaron/Downloads/MIF Copies from TC/1st Grade/Extra Practice/Volume A")  # update this
+ROOT_DIR = Path("/Users/aaron/Downloads/MIF Copies from TC/1st Grade/Extra Practice")  # update this
 
 def find_pdfs(directory):
     return [f for f in directory.rglob("*.pdf") if f.is_file()]

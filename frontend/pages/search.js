@@ -117,9 +117,9 @@ export default function SearchPage() {
               src={`http://localhost:8000/previews/${page.pdf_name}-page${page.page_number}.png`}
               alt="PDF Page Preview"
               style={{
-                width: "80px",
-                minWidth: "60px",
-                borderRadius: "6px",
+                width: "180px",
+                minWidth: "140px",
+                borderRadius: "10px",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.07)"
               }}
               onError={e => { e.target.style.display = 'none'; }}
@@ -249,8 +249,8 @@ export default function SearchPage() {
                   src={`http://localhost:8000/previews/${r.pdf_name}-page${r.page_number}.png`}
                   alt="PDF Preview"
                   style={{
-                    width: "120px",
-                    minWidth: "80px",
+                    width: "280px",
+                    minWidth: "240px",
                     borderRadius: "8px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.10)"
                   }}

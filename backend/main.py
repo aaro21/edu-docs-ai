@@ -13,8 +13,9 @@ from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi import HTTPException
 
-from sqlmodel import SQLModel, select
+from sqlmodel import SQLModel, select, func, case
 from pydantic import BaseModel
 
 from models import Page
@@ -22,9 +23,32 @@ from database import init_db, get_session
 from embedding import get_embedding
 from faiss_index import PageIndex
 from pdf_preview import render_page_preview
+import subprocess
+from fastapi import Depends
+from fastapi import APIRouter
+from vision import run_vision_model
+
 
 # Ensure the preview directory exists BEFORE mounting as static
 os.makedirs("uploads/previews", exist_ok=True)
+
+# Optional: basic admin key for safety
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "devkey")
+
+def check_admin(key: str = Query(...)):
+    if key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Not authorized.")
+
+def vision_context_prompt(tags, extracted_text, extra_context=None):
+    prompt = ""
+    if tags:
+        prompt += f"Tags: {tags}\n"
+    if extra_context:
+        prompt += extra_context + "\n"
+    if extracted_text:
+        prompt += 'Extracted text from the page:\n"""\n' + extracted_text.strip() + '\n"""\n'
+    prompt += "Please summarize or describe the worksheet page for an elementary school teacher."
+    return prompt
 
 app = FastAPI()
 
@@ -47,6 +71,10 @@ index = PageIndex()
 
 # Rebuild FAISS index from existing DB entries
 session = get_session()
+
+# Wipe out any previous index and mapping
+index.clear()
+
 pages = session.exec(select(Page)).all()
 for page in pages:
     if page.embedding:
@@ -63,43 +91,85 @@ class ExportRequest(BaseModel):
 
 @app.post("/upload_pdf/")
 async def upload_pdf(file: UploadFile = File(...)):
-    # Save uploaded file
-    file_location = f"uploads/{file.filename}"
-    with open(file_location, "wb") as f_out:
-        content = await file.read()
-        f_out.write(content)
+    try:
+        os.makedirs("uploads", exist_ok=True)
 
-    doc = fitz.open(file_location)
-    session = get_session()
+        # Extract the basename and original path
+        filename = os.path.basename(file.filename)        # 'Chapter8.pdf'
+        original_path = file.filename                     # 'Volume A/Chapter8.pdf'
 
-    for i in range(doc.page_count):
-        page_obj = doc[i]
-        text = page_obj.get_text()
-        text = clean_pdf_text(text)
-        images = page_obj.get_images(full=True)
-        is_image_heavy = len(images) > 0
+        file_location = f"uploads/{filename}"             # Flat storage
 
-        tags = []
-        if is_image_heavy:
-            tags.append("image_heavy")
+        # Write the PDF to uploads/
+        with open(file_location, "wb") as f_out:
+            content = await file.read()
+            f_out.write(content)
 
-        # --- NEW EMBEDDING LOGIC ---
-        if text:
-            embedding = get_embedding(text)
-        else:
-            embedding = None
+        try:
+            doc = fitz.open(file_location)
+        except Exception as e:
+            print(f"PyMuPDF failed to open {filename}: {e}")
+            raise HTTPException(status_code=400, detail=f"PDF parsing failed: {e}")
 
-        page = Page(
-            pdf_name=file.filename,
-            page_number=i + 1,
-            text=text,
-            embedding=",".join(map(str, embedding)) if embedding else None,
-            tags=",".join(tags) if tags else None,
-        )
-        session.add(page)
+        session = get_session()
+        num_pages = doc.page_count
+        pages_processed = 0
 
-    session.commit()
-    return {"status": "success", "pages_processed": doc.page_count}
+        for i in range(num_pages):
+            page_obj = doc[i]
+            text = page_obj.get_text()
+            text = clean_pdf_text(text)
+            images = page_obj.get_images(full=True)
+            is_image_heavy = len(images) > 0
+
+            # ---- FOLDER TAG LOGIC ----
+            folder_tags = []
+            if original_path and ("/" in original_path or "\\" in original_path):
+                # Handles both Unix and Windows slashes
+                folders = os.path.dirname(original_path).replace("\\", "/").split("/")
+                folder_tags = [f for f in folders if f]
+
+            tags = list(folder_tags)
+            if is_image_heavy:
+                tags.append("image_heavy")
+
+            # ---- Embedding Logic ----
+            embed_text = text
+            if tags:
+                embed_text = embed_text.strip() + "\n[tags: " + ", ".join(tags) + "]"
+
+            if embed_text and len(embed_text.strip()) > 10:
+                try:
+                    embedding = get_embedding(embed_text)
+                    if embedding:
+                        print(f"Embedding OK for {filename}, page {i+1}")
+                    else:
+                        print(f"Embedding empty for {filename}, page {i+1}")
+                except Exception as e:
+                    print(f"Embedding failed for {filename}, page {i+1}: {e}")
+                    embedding = None
+            else:
+                embedding = None
+                print(f"Skipped embedding for {filename}, page {i+1}: not enough text")
+
+            page = Page(
+                pdf_name=filename,
+                pdf_path=original_path,     # Saves the original folder+filename as metadata
+                page_number=i + 1,
+                text=text,
+                embedding=",".join(map(str, embedding)) if embedding else None,
+                tags=",".join(tags) if tags else None,
+            )
+            session.add(page)
+            pages_processed += 1
+
+        session.commit()
+        print(f"Successfully processed {pages_processed}/{num_pages} pages in {filename}")
+        return {"status": "success", "pages_processed": pages_processed}
+
+    except Exception as e:
+        print(f"Error in upload_pdf for {file.filename}: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed for {file.filename}: {e}")
 
 @app.get("/tags")
 def list_all_tags():
@@ -175,15 +245,55 @@ def search_pages(q: str = Query(...), tag: Optional[str] = None):
     return sorted_results
 
 @app.patch("/pages/{page_id}/tags")
-def update_page_tags(page_id: int, payload: TagUpdate):
+def update_tags(page_id: int, tags: str = Body(...)):
     session = get_session()
     page = session.get(Page, page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
-    page.tags = payload.tags
+    page.tags = tags
+
+    # --- RECOMPUTE EMBEDDING WITH NEW TAGS ---
+    embed_text = page.text or ""
+    tag_list = tags.split(",") if tags else []
+    if tag_list:
+        embed_text = embed_text.strip() + "\n[tags: " + ", ".join(tag_list) + "]"
+    if embed_text and len(embed_text.strip()) > 10:
+        try:
+            embedding = get_embedding(embed_text)
+            page.embedding = ",".join(map(str, embedding)) if embedding else None
+        except Exception as e:
+            print(f"Embedding update failed for page {page_id}: {e}")
+            page.embedding = None
+    else:
+        page.embedding = None
+
     session.add(page)
     session.commit()
-    return {"message": "Tags updated", "page_id": page_id, "tags": page.tags}
+
+    # --- UPDATE FAISS IN-MEMORY INDEX ---
+    try:
+        # Remove and re-add this page in the FAISS index and page_map
+        # (Assumes you have a global `index` object of type PageIndex)
+        global index
+        # Find old entry
+        idx_to_update = None
+        for idx, (pid, _) in enumerate(index.page_map):
+            if pid == page_id:
+                idx_to_update = idx
+                break
+        if idx_to_update is not None:
+            # Remove from index and page_map
+            index.index.remove_ids(np.array([idx_to_update], dtype=np.int64))
+            del index.page_map[idx_to_update]
+        # Re-add if embedding is not None
+        if page.embedding:
+            new_embedding = list(map(float, page.embedding.split(",")))
+            index.add(page, new_embedding)
+        print(f"FAISS index updated for page {page_id}")
+    except Exception as e:
+        print(f"FAISS index update failed for page {page_id}: {e}")
+
+    return {"status": "ok"}
 
 @app.get("/files")
 def list_uploaded_files():
@@ -204,6 +314,14 @@ def list_uploaded_files():
             file_info[key]["image_heavy_count"] += 1
 
     return list(file_info.values())
+
+@app.get("/pages/{page_id}")
+def get_page(page_id: int):
+    session = get_session()
+    page = session.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return page
 
 @app.get("/pages_by_pdf")
 def get_pages_by_pdf(pdf_name: str):
@@ -290,3 +408,159 @@ def clean_pdf_text(text):
     # text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
     
     return text.strip()
+
+@app.post("/admin/generate_previews")
+def admin_generate_previews(key: str = Depends(check_admin)):
+    try:
+        result = subprocess.run(
+            ["python", "scripts/generate_previews.py"], capture_output=True, text=True, check=True
+        )
+        return {"status": "ok", "output": result.stdout}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.post("/admin/ingest_folder")
+def admin_ingest_folder(key: str = Depends(check_admin)):
+    try:
+        result = subprocess.run(
+            ["python", "scripts/ingest_folder.py"], capture_output=True, text=True, check=True
+        )
+        return {"status": "ok", "output": result.stdout}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+@app.post("/admin/reset_pages")
+def admin_reset_pages(key: str = Depends(check_admin)):
+    try:
+        # 1. Run your DB reset script
+        result = subprocess.run(
+            ["python", "reset_pages.py"], capture_output=True, text=True, check=True
+        )
+        output = result.stdout
+
+        # 2. Clear FAISS index (in memory)
+        global index  # assumes index is defined globally at module level
+        if 'index' in globals():
+            index.clear()
+            output += "\nFAISS index cleared."
+        else:
+            output += "\nWarning: FAISS index not found in globals."
+
+        # 3. Clear graph (if you have one)
+        global graph  # assumes you have a graph object globally
+        if 'graph' in globals():
+            if hasattr(graph, "clear"):
+                graph.clear()
+                output += "\nGraph structure cleared."
+            else:
+                output += "\nWarning: graph object has no .clear() method."
+        else:
+            output += "\n(No graph object found—skipping graph reset.)"
+
+        print(output)
+        return {"status": "ok", "output": output}
+
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    
+@app.get("/admin/top10")
+def admin_top10():
+    session = get_session()
+    # Most recent 10 PDFs by name (could also group by pdf_path if you want folder granularity)
+    recent_pdfs = session.exec(
+        select(Page.pdf_name)
+        .group_by(Page.pdf_name)
+        .order_by(func.max(Page.id).desc())
+        .limit(10)
+    ).all()
+
+    # Top 10 tags
+    all_tags = session.exec(select(Page.tags)).all()
+    tag_counts = {}
+    for tag_str in all_tags:
+        if tag_str:
+            for tag in tag_str.split(","):
+                t = tag.strip()
+                if t:
+                    tag_counts[t] = tag_counts.get(t, 0) + 1
+    top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Top 10 folders (by occurrence in pdf_path)
+    all_paths = session.exec(select(Page.pdf_path)).all()
+    folder_counts = {}
+    for path in all_paths:
+        if path and ("/" in path or "\\" in path):
+            folders = os.path.dirname(path).replace("\\", "/").split("/")
+            for f in folders:
+                if f:
+                    folder_counts[f] = folder_counts.get(f, 0) + 1
+    top_folders = sorted(folder_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    return {
+        "recent_pdfs": recent_pdfs,
+        "top_tags": top_tags,
+        "top_folders": top_folders
+    }
+
+@app.get("/admin/embedding_status")
+def admin_embedding_status():
+    session = get_session()
+    # Count pages with and without embeddings, grouped by pdf_name
+    
+    result = session.exec(
+        select(
+            Page.pdf_name,
+            func.count().label("total"),
+            func.sum(case((Page.embedding == None, 1), else_=0)).label("missing")
+        ).group_by(Page.pdf_name)
+    ).all()
+    return [{"pdf_name": r[0], "total": r[1], "missing": r[2]} for r in result]
+
+@app.post("/pages/{page_id}/vision_annotate")
+def vision_annotate(page_id: int):
+    session = get_session()
+    page = session.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    preview_path = f"uploads/previews/{page.pdf_name}-page{page.page_number}.png"
+    if not os.path.exists(preview_path):
+        raise HTTPException(status_code=404, detail="Preview image not found")
+
+    # Compose prompt from tags and extracted text
+    prompt = vision_context_prompt(page.tags, page.text, extra_context="Elementary math worksheet page.")
+
+    # --- Vision call! ---
+    vision_output = run_vision_model(preview_path, prompt)
+    page.vision_summary = vision_output
+    session.add(page)
+    session.commit()
+    print(f"Vision output for page {page_id}: {vision_output!r}")
+    
+    return {"status": "ok", "vision_summary": vision_output}
+
+@app.post("/pages/{page_id}/vision_update")
+def update_vision_summary(page_id: int, summary: str = Body(...)):
+    session = get_session()
+    page = session.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    page.vision_summary = summary
+
+    # --- Re-embed using vision summary + tags! ---
+    embed_text = summary
+    tag_list = page.tags.split(",") if page.tags else []
+    if tag_list:
+        embed_text += "\n[tags: " + ", ".join(tag_list) + "]"
+    if embed_text and len(embed_text.strip()) > 10:
+        try:
+            embedding = get_embedding(embed_text)
+            page.embedding = ",".join(map(str, embedding)) if embedding else None
+        except Exception as e:
+            print(f"Embedding failed for page {page_id}: {e}")
+            page.embedding = None
+    else:
+        page.embedding = None
+
+    session.add(page)
+    session.commit()
+    return {"status": "ok"}

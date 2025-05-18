@@ -1,4 +1,3 @@
-// frontend/pages/file.js
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
@@ -9,6 +8,7 @@ export default function FileDetailPage() {
   const [pages, setPages] = useState([]);
   const [tags, setTags] = useState({});
   const [loading, setLoading] = useState(true);
+  const [visionLoading, setVisionLoading] = useState({}); // per-page loading state
 
   useEffect(() => {
     if (!name) return;
@@ -48,6 +48,24 @@ export default function FileDetailPage() {
     }
   };
 
+  const handleRunVision = async (pageId) => {
+    setVisionLoading((prev) => ({ ...prev, [pageId]: true }));
+    try {
+      await fetch(`http://localhost:8000/pages/${pageId}/vision_annotate`, {
+        method: "POST",
+      });
+      // Go straight to the vision edit page for that page
+      router.push(`/vision_edit/${pageId}`);
+    } catch (err) {
+      alert("Vision annotation failed!");
+    }
+    setVisionLoading((prev) => ({ ...prev, [pageId]: false }));
+  };
+
+  const handleEditVision = (pageId) => {
+    router.push(`/vision_edit/${pageId}`);
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-4xl">
@@ -72,8 +90,8 @@ export default function FileDetailPage() {
                     src={`http://localhost:8000/previews/${name}-page${page.page_number}.png`}
                     alt={`Page ${page.page_number} Preview`}
                     style={{
-                      width: "120px",
-                      minWidth: "80px",
+                      width: "280px",
+                      minWidth: "240px",
                       borderRadius: "8px",
                       boxShadow: "0 2px 8px rgba(0,0,0,0.10)"
                     }}
@@ -83,6 +101,27 @@ export default function FileDetailPage() {
                     {page.text.length > 500 ? page.text.slice(0, 500) + "..." : page.text}
                   </p>
                 </div>
+                {/* Vision AI Section */}
+                {!page.vision_summary ? (
+                  <button
+                    className="bg-purple-600 hover:bg-purple-700 text-white rounded px-3 py-1 mb-2"
+                    onClick={() => handleRunVision(page.page_id)}
+                    disabled={visionLoading[page.page_id]}
+                  >
+                    {visionLoading[page.page_id] ? "Processing..." : "Run Vision AI"}
+                  </button>
+                ) : (
+                  <div className="bg-yellow-50 rounded p-2 mt-2 mb-2">
+                    <div className="font-bold text-sm mb-1">Vision Summary:</div>
+                    <div className="whitespace-pre-wrap text-sm">{page.vision_summary}</div>
+                    <button
+                      className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 mt-2"
+                      onClick={() => handleEditVision(page.page_id)}
+                    >
+                      Edit Vision Summary
+                    </button>
+                  </div>
+                )}
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
