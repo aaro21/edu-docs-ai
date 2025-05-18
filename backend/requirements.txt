@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+sqlmodel
+python-multipart
+PyMuPDF
+requests
+python-dotenv
+faiss-cpu
