@@ -60,7 +60,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     # Extract folder-based tags from file path (if available)
     path_parts = Path(file.filename).parts
-    folder_tags = [part for part in path_parts[:-1] if "." not in part]  # exclude filename
+    folder_tags = [part for part in path_parts[:-1] if "." not in part]
     tag_string = ", ".join(folder_tags)
 
     doc = fitz.open(file_location)
@@ -68,19 +68,29 @@ async def upload_pdf(file: UploadFile = File(...)):
     pages = []
 
     for i in range(doc.page_count):
-        text = doc[i].get_text()
-        embedding = get_embedding(text)
+        page_obj = doc[i]
+        text = page_obj.get_text()
+        is_image_heavy = len(text.strip()) < 40 and len(page_obj.get_images(full=True)) > 0
+
+        if is_image_heavy:
+            summary = "[Image-heavy page — pending AI captioning]"
+            embedding = None
+        else:
+            summary = text
+            embedding = get_embedding(text)
+
         page = Page(
             pdf_name=file.filename,
             page_number=i + 1,
-            text=text,
-            embedding=",".join(map(str, embedding)),
-            tags=tag_string
+            text=summary,
+            embedding=",".join(map(str, embedding)) if embedding else None,
+            tags=tag_string + (", image-heavy" if is_image_heavy else "")
         )
         session.add(page)
         session.flush()
-        index.add(page, embedding)
-        pages.append(text)
+        if embedding:
+            index.add(page, embedding)
+        pages.append(summary)
 
     session.commit()
 
@@ -178,14 +188,22 @@ def update_page_tags(page_id: int, payload: TagUpdate):
 @app.get("/files")
 def list_uploaded_files():
     session = get_session()
-    result = session.exec(select(Page.pdf_name)).all()
-    file_counts = {}
-    for name in result:
-        if name in file_counts:
-            file_counts[name] += 1
-        else:
-            file_counts[name] = 1
-    return [{"pdf_name": name, "page_count": count} for name, count in file_counts.items()]
+    result = session.exec(select(Page)).all()
+    file_info = {}
+
+    for page in result:
+        key = page.pdf_name
+        if key not in file_info:
+            file_info[key] = {
+                "pdf_name": key,
+                "page_count": 0,
+                "image_heavy_count": 0
+            }
+        file_info[key]["page_count"] += 1
+        if "image-heavy" in (page.tags or ""):
+            file_info[key]["image_heavy_count"] += 1
+
+    return list(file_info.values())
 
 @app.get("/pages_by_pdf")
 def get_pages_by_pdf(pdf_name: str):
@@ -227,3 +245,26 @@ def export_selected_pages(payload: ExportRequest):
     pdf_writer.close()
 
     return FileResponse(temp_file.name, filename="exported_pages.pdf", media_type="application/pdf")
+
+@app.get("/graph")
+def get_graph():
+    session = get_session()
+    pages = session.exec(select(Page)).all()
+    nodes = []
+    edges = []
+    tag_index = {}
+
+    # Add page nodes
+    for p in pages:
+        nodes.append({
+            "data": {"id": f"page-{p.id}", "label": f"Page {p.page_number}", "type": "page", "pdf": p.pdf_name} })
+
+        if p.tags:
+            for tag in [t.strip().lower() for t in p.tags.split(",") if t.strip()]:
+                tag_id = f"tag-{tag}"
+                if tag_id not in tag_index:
+                    nodes.append({"data": {"id": tag_id, "label": tag, "type": "tag"}})
+                    tag_index[tag_id] = True
+                edges.append({"data": {"source": f"page-{p.id}", "target": tag_id}})
+
+    return JSONResponse(content={"nodes": nodes, "edges": edges})

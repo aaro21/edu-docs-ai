@@ -38,6 +38,11 @@ export default function FilesPage() {
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="font-medium text-gray-800">{file.pdf_name}</p>
+                    {file.image_heavy_count > 0 && (
+                    <p className="text-sm text-yellow-600 mt-1">
+                      ⚠️ {file.image_heavy_count} image-heavy page{file.image_heavy_count > 1 ? "s" : ""}
+                    </p>
+                    )}
                     <p className="text-sm text-gray-500">{file.page_count} pages</p>
                   </div>
                   <Link
