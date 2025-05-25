@@ -75,3 +75,8 @@ MIT
 
 ## 🙋‍♀️ Made for Teachers
 This project was created to help educators like my wife manage their vast collections of teaching materials with the power of AI. ❤️
+
+## Useful commands
+docker-compose down
+docker-compose up --build
+python scripts/ingest_folder.py
