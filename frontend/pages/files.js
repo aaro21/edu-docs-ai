@@ -5,9 +5,10 @@ import Link from 'next/link';
 export default function FilesPage() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
   useEffect(() => {
-    fetch("http://localhost:8000/files")
+    fetch(`${API_BASE}/files`)
       .then((res) => res.json())
       .then((data) => {
         setFiles(data);

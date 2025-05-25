@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AZURE_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+AZURE_OPENAI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_ENDPOINT = "https://roberts-openi.openai.azure.com/"
 AZURE_OPENAI_EMBED_DEPLOYMENT = os.environ.get("AZURE_OPENAI_EMBED_DEPLOYMENT", "text-embedding-3-small")
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")

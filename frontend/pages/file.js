@@ -1,6 +1,8 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+
 export default function FileDetailPage() {
   const router = useRouter();
   const { name } = router.query;
@@ -8,11 +10,11 @@ export default function FileDetailPage() {
   const [pages, setPages] = useState([]);
   const [tags, setTags] = useState({});
   const [loading, setLoading] = useState(true);
-  const [visionLoading, setVisionLoading] = useState({}); // per-page loading state
+  const [visionLoading, setVisionLoading] = useState({});
 
   useEffect(() => {
     if (!name) return;
-    fetch(`http://localhost:8000/pages_by_pdf?pdf_name=${encodeURIComponent(name)}`)
+    fetch(`${API_BASE}/pages_by_pdf?pdf_name=${encodeURIComponent(name)}`)
       .then((res) => res.json())
       .then((data) => {
         setPages(data);
@@ -34,11 +36,9 @@ export default function FileDetailPage() {
   const handleTagSave = async (pageId) => {
     const newTags = tags[pageId] || "";
     try {
-      const res = await fetch(`http://localhost:8000/pages/${pageId}/tags`, {
+      const res = await fetch(`${API_BASE}/pages/${pageId}/tags`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags })
       });
       if (!res.ok) throw new Error("Failed to update tags");
@@ -51,10 +51,9 @@ export default function FileDetailPage() {
   const handleRunVision = async (pageId) => {
     setVisionLoading((prev) => ({ ...prev, [pageId]: true }));
     try {
-      await fetch(`http://localhost:8000/pages/${pageId}/vision_annotate`, {
+      await fetch(`${API_BASE}/pages/${pageId}/vision_annotate`, {
         method: "POST",
       });
-      // Go straight to the vision edit page for that page
       router.push(`/vision_edit/${pageId}`);
     } catch (err) {
       alert("Vision annotation failed!");
@@ -87,7 +86,7 @@ export default function FileDetailPage() {
                 </div>
                 <div className="flex gap-4 mb-2 items-start">
                   <img
-                    src={`http://localhost:8000/previews/${name}-page${page.page_number}.png`}
+                    src={`${API_BASE}/previews/${name}-page${page.page_number}.png`}
                     alt={`Page ${page.page_number} Preview`}
                     style={{
                       width: "280px",
@@ -97,32 +96,35 @@ export default function FileDetailPage() {
                     }}
                     onError={e => { e.target.style.display = 'none'; }}
                   />
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2 flex-1">
-                    {page.text.length > 500 ? page.text.slice(0, 500) + "..." : page.text}
-                  </p>
+                  {page.vision_summary ? (
+                    <div className="flex-1">
+                      <div className="bg-yellow-100 border border-yellow-300 rounded p-3 mb-2 shadow-inner">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="inline-block bg-green-200 text-green-800 px-2 py-0.5 rounded-full text-xs">
+                            Vision AI Processed
+                          </span>
+                          <span className="font-semibold text-yellow-800">Vision Summary:</span>
+                        </div>
+                        <div className="whitespace-pre-wrap text-sm text-yellow-900">{page.vision_summary}</div>
+                        <div className="flex justify-end">
+                          <button
+                            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded mt-2"
+                            onClick={() => handleEditVision(page.page_id)}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2 flex-1">
+                      {page.text && page.text.length > 500
+                        ? page.text.slice(0, 500) + "..."
+                        : page.text || <span className="italic text-gray-400">No extracted text available.</span>}
+                    </p>
+                  )}
                 </div>
-                {/* Vision AI Section */}
-                {!page.vision_summary ? (
-                  <button
-                    className="bg-purple-600 hover:bg-purple-700 text-white rounded px-3 py-1 mb-2"
-                    onClick={() => handleRunVision(page.page_id)}
-                    disabled={visionLoading[page.page_id]}
-                  >
-                    {visionLoading[page.page_id] ? "Processing..." : "Run Vision AI"}
-                  </button>
-                ) : (
-                  <div className="bg-yellow-50 rounded p-2 mt-2 mb-2">
-                    <div className="font-bold text-sm mb-1">Vision Summary:</div>
-                    <div className="whitespace-pre-wrap text-sm">{page.vision_summary}</div>
-                    <button
-                      className="bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 mt-2"
-                      onClick={() => handleEditVision(page.page_id)}
-                    >
-                      Edit Vision Summary
-                    </button>
-                  </div>
-                )}
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-center mt-2">
                   <input
                     type="text"
                     value={tags[page.page_id] || ""}
@@ -135,6 +137,15 @@ export default function FileDetailPage() {
                   >
                     Save Tags
                   </button>
+                  {!page.vision_summary && (
+                    <button
+                      className="text-sm bg-purple-600 hover:bg-purple-700 text-white px-4 py-1 rounded"
+                      onClick={() => handleRunVision(page.page_id)}
+                      disabled={visionLoading[page.page_id]}
+                    >
+                      {visionLoading[page.page_id] ? "Processing..." : "Run Vision AI"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

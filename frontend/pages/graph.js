@@ -5,9 +5,10 @@ import cytoscape from "cytoscape";
 export default function GraphView() {
   const containerRef = useRef(null);
   const [error, setError] = useState(null);
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
   useEffect(() => {
-    fetch("http://localhost:8000/graph")
+    fetch(`${API_BASE}/graph`)
       .then((res) => res.json())
       .then((data) => {
         const cy = cytoscape({

@@ -57,6 +57,19 @@ export default function VisionEditPage() {
   return (
     <main className="min-h-screen flex flex-col items-center px-4 py-10 bg-gray-50">
       <div className="bg-white shadow rounded-lg p-8 w-full max-w-2xl">
+        {page && (
+          <div className="mb-4 text-sm text-gray-600 flex items-center">
+            <span
+              className="cursor-pointer text-blue-600 hover:underline flex items-center"
+              onClick={() => router.push(`/file?name=${encodeURIComponent(page.pdf_name)}`)}
+            >
+              <span role="img" aria-label="File" className="mr-1">📄</span>
+              {page.pdf_name}
+            </span>
+            <span className="mx-2">&gt;</span>
+            <span>Vision Edit (Page {page.page_number})</span>
+          </div>
+        )}
         <h1 className="text-xl font-bold mb-4">Edit Vision Annotation</h1>
         <div className="mb-6 flex flex-col items-center">
           {imageSrc && (

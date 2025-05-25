@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
 const ADMIN_KEY = "devkey"; // Set to match backend or use from env
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 const actions = [
   { name: "Generate Image Previews", endpoint: "/admin/generate_previews" },
@@ -15,14 +16,14 @@ export default function AdminPage() {
   const [embeddingStatus, setEmbeddingStatus] = useState(null);
 
   useEffect(() => {
-    fetch("http://localhost:8000/admin/top10")
+    fetch(`${API_BASE}/admin/top10`)
       .then(res => res.json())
       .then(data => setTop10(data))
       .catch(() => setTop10(null));
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:8000/admin/embedding_status")
+    fetch(`${API_BASE}/admin/embedding_status`)
       .then(res => res.json())
       .then(data => setEmbeddingStatus(data));
   }, []);
@@ -31,7 +32,7 @@ export default function AdminPage() {
     setLoading(endpoint);
     setOutput("");
     try {
-      const res = await fetch(`http://localhost:8000${endpoint}?key=${ADMIN_KEY}`, {
+      const res = await fetch(`${API_BASE}${endpoint}?key=${ADMIN_KEY}`, {
         method: "POST"
       });
       const data = await res.json();

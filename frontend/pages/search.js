@@ -1,4 +1,3 @@
-// frontend/pages/search.js
 import { useState, useEffect } from 'react';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import {
@@ -8,6 +7,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -21,7 +22,7 @@ export default function SearchPage() {
   const [selectedTag, setSelectedTag] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:8000/tags")
+    fetch(`${API_BASE}/tags`)
       .then(res => res.json())
       .then(data => setTags(data))
       .catch(err => console.error("Failed to fetch tags", err));
@@ -32,7 +33,7 @@ export default function SearchPage() {
     setLoading(true);
     try {
       const tagParam = selectedTag ? `&tag=${encodeURIComponent(selectedTag)}` : "";
-      const res = await fetch(`http://localhost:8000/search?q=${encodeURIComponent(query)}${tagParam}`);
+      const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}${tagParam}`);
       const data = await res.json();
       setResults(data);
       setSelectedPages([]);
@@ -53,7 +54,7 @@ export default function SearchPage() {
   const handleTagSave = async (pageId) => {
     const newTags = tagEdits[pageId] || "";
     try {
-      const res = await fetch(`http://localhost:8000/pages/${pageId}/tags`, {
+      const res = await fetch(`${API_BASE}/pages/${pageId}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags })
@@ -75,7 +76,7 @@ export default function SearchPage() {
   const handleExport = async () => {
     if (selectedPages.length === 0) return;
     try {
-      const res = await fetch("http://localhost:8000/export_pages", {
+      const res = await fetch(`${API_BASE}/export_pages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -114,7 +115,7 @@ export default function SearchPage() {
         {page ? (
           <div className="flex items-start gap-3">
             <img
-              src={`http://localhost:8000/previews/${page.pdf_name}-page${page.page_number}.png`}
+              src={`${API_BASE}/previews/${page.pdf_name}-page${page.page_number}.png`}
               alt="PDF Page Preview"
               style={{
                 width: "180px",
@@ -181,7 +182,7 @@ export default function SearchPage() {
               className="border border-gray-300 rounded px-2 py-1 text-sm"
             >
               <option value="">All Tags</option>
-              {tags.map((tag, idx) => (
+              {Array.isArray(tags) && tags.map((tag, idx) => (
                 <option key={idx} value={tag}>{tag}</option>
               ))}
             </select>
@@ -246,7 +247,7 @@ export default function SearchPage() {
               </div>
               <div className="flex gap-4 mb-2 items-start">
                 <img
-                  src={`http://localhost:8000/previews/${r.pdf_name}-page${r.page_number}.png`}
+                  src={`${API_BASE}/previews/${r.pdf_name}-page${r.page_number}.png`}
                   alt="PDF Preview"
                   style={{
                     width: "280px",

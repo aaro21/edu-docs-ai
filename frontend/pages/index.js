@@ -4,6 +4,9 @@ export default function Home() {
   const [file, setFile] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [visionOnUpload, setVisionOnUpload] = useState(false);
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
   const handleUpload = async () => {
     if (!file) return;
@@ -11,9 +14,10 @@ export default function Home() {
     setLoading(true);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("vision_on_upload", visionOnUpload ? "true" : "false");
 
     try {
-      const res = await fetch("http://localhost:8000/upload", {
+      const res = await fetch(`${API_BASE}/upload`, {
         method: "POST",
         body: formData,
       });
@@ -41,7 +45,18 @@ export default function Home() {
             className="block w-full text-sm text-gray-700 border border-gray-300 rounded-lg cursor-pointer bg-white p-2"
           />
         </div>
-
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            id="visionOnUpload"
+            type="checkbox"
+            checked={visionOnUpload}
+            onChange={e => setVisionOnUpload(e.target.checked)}
+            className="accent-blue-600"
+          />
+          <label htmlFor="visionOnUpload" className="text-sm text-gray-700">
+            Run Vision AI on image-heavy pages after upload
+          </label>
+        </div>
         <button
           onClick={handleUpload}
           disabled={!file || loading}
@@ -57,14 +72,28 @@ export default function Home() {
             <p><strong>Page Count:</strong> {metadata.page_count}</p>
 
             <h3 className="mt-4 font-medium text-gray-700">Content Preview:</h3>
-            {metadata.pages.map((text, idx) => (
-              <pre
-                key={idx}
-                className="bg-gray-50 text-gray-800 text-sm p-3 mt-2 rounded border overflow-auto whitespace-pre-wrap break-words"
-              >
-                {text}
-              </pre>
-            ))}
+            {Array.isArray(metadata.previews) && metadata.previews.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4">
+                {metadata.previews.map((url, idx) => (
+                  <div key={idx} className="flex flex-col items-center">
+                    <img
+                      src={url}
+                      alt={`Page ${idx + 1} Preview`}
+                      className="rounded shadow border mb-2"
+                      style={{ width: "160px", maxHeight: "220px", objectFit: "contain" }}
+                    />
+                    {metadata.pages && metadata.pages[idx] && (
+                      <pre className="text-xs text-gray-700 whitespace-pre-wrap max-h-20 overflow-auto">
+                        {metadata.pages[idx].slice(0, 120)}{metadata.pages[idx].length > 120 ? "..." : ""}
+                      </pre>
+                    )}
+                    <div className="text-xs text-gray-600">Page {idx + 1}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-500 italic mt-2">No image previews available.</div>
+            )}
           </div>
         )}
       </div>

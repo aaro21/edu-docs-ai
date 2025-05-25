@@ -34,3 +34,20 @@ def run_vision_model(image_path: str, prompt: str) -> str:
     except Exception:
         print("No valid choices or message in response:", response)
         return ""
+    
+def vision_context_prompt(tags, extracted_text, extra_context=None):
+    prompt = ""
+    if tags:
+        prompt += f"Existing tags: {tags}\n"
+    if extra_context:
+        prompt += extra_context + "\n"
+    if extracted_text:
+        prompt += 'Extracted text from the page:\n"""\n' + extracted_text.strip() + '\n"""\n'
+    prompt += (
+        "Please do two things for this worksheet page for an elementary school teacher:\n"
+        "1. Summarize or describe the worksheet page for the teacher, as 'vision_summary'.\n"
+        "2. Suggest up to 3 relevant comma-separated tags for searching, as 'tags'.\n"
+        'Respond in this JSON format:\n'
+        '{\n  \"vision_summary\": \"...\",\n  \"tags\": \"tag1, tag2, tag3\"\n}'
+    )
+    return prompt
