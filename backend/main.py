@@ -87,6 +87,9 @@ class ExportRequest(BaseModel):
     order: List[int]
     title: Optional[str] = None
 
+class SimpleExportRequest(BaseModel):
+    page_ids: List[int]
+
 @app.post("/upload")
 @app.post("/upload_pdf/")
 async def upload_pdf(
@@ -387,6 +390,25 @@ def get_pages_by_pdf(pdf_name: str):
         for p in pages
     ]
 
+@app.get("/pages/filter")
+def filter_pages(query: str = Query(...)):
+    session = get_session()
+    q = query.lower().replace(":", "")
+    pages = session.exec(
+        select(Page).where(func.lower(func.replace(Page.text, ":", "")).like(f"%{q}%"))
+    ).all()
+    return [
+        {
+            "page_id": p.id,
+            "pdf_name": p.pdf_name,
+            "page_number": p.page_number,
+            "text": p.text,
+            "tags": p.tags or "",
+        }
+        for p in pages
+    ]
+
+
 @app.post("/export_pages")
 def export_selected_pages(payload: ExportRequest):
     session = get_session()
@@ -402,6 +424,24 @@ def export_selected_pages(payload: ExportRequest):
         title_page.insert_text((72, 150), payload.title, fontsize=24, fontname="helv")
         pdf_writer.insert_pdf(title_doc)
 
+    for page in pages:
+        if page:
+            src_path = UPLOAD_DIR / page.pdf_name
+            src_doc = fitz.open(src_path)
+            pdf_writer.insert_pdf(src_doc, from_page=page.page_number - 1, to_page=page.page_number - 1)
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf_writer.save(temp_file.name)
+    pdf_writer.close()
+
+    return FileResponse(temp_file.name, filename="exported_pages.pdf", media_type="application/pdf")
+
+@app.post("/pages/export")
+def export_pages_simple(payload: SimpleExportRequest):
+    session = get_session()
+    pages = [session.get(Page, pid) for pid in payload.page_ids if pid is not None]
+
+    pdf_writer = fitz.open()
     for page in pages:
         if page:
             src_path = UPLOAD_DIR / page.pdf_name

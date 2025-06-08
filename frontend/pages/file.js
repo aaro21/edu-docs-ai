@@ -11,6 +11,9 @@ export default function FileDetailPage() {
   const [tags, setTags] = useState({});
   const [loading, setLoading] = useState(true);
   const [visionLoading, setVisionLoading] = useState({});
+  const [filter, setFilter] = useState("");
+  const [selectedPages, setSelectedPages] = useState([]);
+  const [exportFilename, setExportFilename] = useState("filtered_pages.pdf");
 
   useEffect(() => {
     if (!name) return;
@@ -65,6 +68,41 @@ export default function FileDetailPage() {
     router.push(`/vision_edit/${pageId}`);
   };
 
+  const normalized = (str) => (str || "").toLowerCase().replace(/:/g, "");
+  const filteredPages = pages.filter((p) =>
+    normalized(p.text).includes(normalized(filter))
+  );
+
+  const toggleSelection = (id) => {
+    setSelectedPages((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedPages(filteredPages.map((p) => p.page_id));
+  };
+
+  const handleExport = async () => {
+    if (selectedPages.length === 0) return;
+    try {
+      const res = await fetch(`${API_BASE}/pages/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_ids: selectedPages })
+      });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = exportFilename.trim() || "filtered_pages.pdf";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed", err);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-4xl">
@@ -75,14 +113,55 @@ export default function FileDetailPage() {
         ) : pages.length === 0 ? (
           <p className="text-gray-600">No pages found for this file.</p>
         ) : (
-          <div className="space-y-4">
-            {pages.map((page, idx) => (
+          <>
+            <div className="flex flex-col md:flex-row gap-2 mb-4">
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter pages e.g. Grade 3 Fall"
+                className="flex-1 border border-gray-300 rounded px-3 py-1 text-sm"
+              />
+              <button
+                onClick={handleSelectAll}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded text-sm"
+              >
+                Select All
+              </button>
+              {selectedPages.length > 0 && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={exportFilename}
+                    onChange={(e) => setExportFilename(e.target.value)}
+                    className="border border-gray-300 rounded px-3 py-1 text-sm"
+                  />
+                  <button
+                    onClick={handleExport}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded text-sm"
+                  >
+                    Export
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="space-y-4">
+            {filteredPages.map((page, idx) => (
               <div
                 key={idx}
                 className="bg-white shadow p-4 rounded-lg border border-gray-200"
               >
-                <div className="mb-2 text-sm text-gray-600">
+                <div className="mb-2 text-sm text-gray-600 flex justify-between items-center">
                   <strong>Page {page.page_number}</strong>
+                  <label className="text-sm">
+                    <input
+                      type="checkbox"
+                      className="mr-1"
+                      checked={selectedPages.includes(page.page_id)}
+                      onChange={() => toggleSelection(page.page_id)}
+                    />
+                    Select
+                  </label>
                 </div>
                 <div className="flex gap-4 mb-2 items-start">
                   <img
@@ -150,6 +229,7 @@ export default function FileDetailPage() {
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
     </main>
