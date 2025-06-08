@@ -1,82 +1,104 @@
 # 📚 EduDocs AI
 
-An AI-powered web application to help teachers organize, search, and summarize educational documents. Built with FastAPI (Python) and Next.js (React), featuring document upload, PDF parsing, semantic search, and export features.
+EduDocs AI is an experimental platform that helps teachers upload, organize and search educational PDFs. It consists of a **FastAPI** backend and a **Next.js** frontend. Uploaded PDFs are parsed page by page so that each page can be tagged, embedded for semantic search and exported.
 
 ---
 
 ## 🚀 Features
-- Upload PDFs (single files or large documents)
-- Auto-parse and preview PDF content
-- Document metadata extraction
-- Built-in Docker setup for easy development
+- Upload individual PDFs or bulk ingest a folder
+- Automatic text extraction using PyMuPDF
+- Generates page thumbnails for quick previews
+- Tags and embeddings for every page enabling semantic search
+- Optional image based "Vision" annotation for pages that are mostly graphics
+- Export selected pages as a new PDF
+- Graph view showing relationships between tags and pages
 
 ---
 
 ## 🛠️ Tech Stack
-- **Frontend**: Next.js (React)
-- **Backend**: FastAPI (Python 3.11)
-- **PDF Parsing**: PyMuPDF
-- **Containerization**: Docker + Docker Compose
+- **Frontend**: Next.js + Tailwind CSS
+- **Backend**: FastAPI running on Python 3.11
+- **Database**: SQLite via SQLModel
+- **Embeddings**: OpenAI API (text-embedding-3-small)
+- **Containerization**: Docker & Docker Compose
 
 ---
 
-## 📦 Project Structure
+## 📦 Directory Overview
 ```
 project-root/
-├── backend/
-│   ├── main.py
-│   ├── Dockerfile
-│   ├── requirements.txt
-│
-├── frontend/
-│   ├── pages/
-│   │   └── index.js
-│   ├── Dockerfile
-│   ├── package.json
-│
-├── uploads/               # Auto-created for storing uploaded files
-├── docker-compose.yml
+├── backend/               # FastAPI application
+│   ├── main.py            # API routes and upload logic
+│   ├── models.py          # SQLModel Page table
+│   ├── database.py        # SQLite setup helpers
+│   ├── embedding.py       # Wrapper around OpenAI embeddings
+│   ├── faiss_index.py     # In‑memory FAISS search index
+│   ├── llm_helpers.py     # Cleans text and generates tags via OpenAI
+│   ├── pdf_preview.py     # Renders page thumbnails
+│   ├── vision.py          # Vision model helper
+│   ├── reset_pages.py     # Clears the page database
+│   └── scripts/           # Utility scripts
+│       ├── backfill_tags_from_paths.py
+│       └── generate_previews.py
+├── frontend/              # Next.js user interface
+│   ├── pages/             # Application routes
+│   │   ├── index.js       # Upload page
+│   │   ├── files.js       # List uploaded PDFs
+│   │   ├── file.js        # Per-file page management
+│   │   ├── search.js      # Semantic search and export
+│   │   ├── vision_edit/[page_id].js # Edit vision summaries
+│   │   ├── graph.js       # Tag/page graph view
+│   │   └── admin.js       # Admin utilities
+│   ├── components/        # Reusable React components
+│   │   └── Layout.js
+│   └── styles/
+├── scripts/               # Stand‑alone utilities
+│   └── ingest_folder.py   # Example script to bulk upload PDFs
+├── docker-compose.yml     # Development containers
+└── README.md
 ```
+
+---
+
+## ⚙️ Environment Variables
+The backend expects several OpenAI related variables which can be provided via `.env` or your host environment:
+- `OPENAI_API_KEY` – API key for embedding and vision endpoints
+- `OPENAI_ENDPOINT` – base URL if using Azure OpenAI
+- `AZURE_OPENAI_EMBED_DEPLOYMENT` – embedding deployment name
+- `AZURE_OPENAI_VISION_DEPLOYMENT` – vision/chat deployment name
+- `AZURE_OPENAI_API_VERSION` – API version string
 
 ---
 
 ## 🧪 Getting Started
-
 ### 1. Clone the Repo
 ```bash
 git clone https://github.com/your-username/edu-docs-ai.git
 cd edu-docs-ai
 ```
 
-### 2. Start the App
+### 2. Launch with Docker
 ```bash
 docker-compose up --build
 ```
+This starts both the FastAPI server on **localhost:8000** and the Next.js app on **localhost:3000**.
 
-### 3. Access the App
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Backend API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+### 3. Useful Commands
+```bash
+docker-compose down                   # Stop containers
+python scripts/ingest_folder.py        # Example bulk ingest
+```
 
 ---
 
-## 🧩 Upcoming Features
-- Semantic search via FAISS / Qdrant
-- Graph-based document relationships
-- Document tagging & categorization
-- Export + summary generation
-- User authentication
+## 🧩 Upcoming Ideas
+- Improved semantic search ranking
+- Document summaries and exports
+- Authentication for multi‑user use
 
 ---
 
 ## 💡 License
 MIT
 
----
-
-## 🙋‍♀️ Made for Teachers
-This project was created to help educators like my wife manage their vast collections of teaching materials with the power of AI. ❤️
-
-## Useful commands
-docker-compose down
-docker-compose up --build
-python scripts/ingest_folder.py
+This project was originally built to assist teachers in organizing their worksheets. Enjoy!
