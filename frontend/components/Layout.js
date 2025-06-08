@@ -13,6 +13,7 @@ export default function Layout({ children }) {
             <Link href="/search" className="hover:underline">Search</Link>
             <Link href="/export" className="hover:underline">Export</Link>
             <Link href="/summary" className="hover:underline">Summary</Link>
+            <Link href="/admin" className="hover:underline">Admin</Link>
           </div>
         </div>
       </nav>
