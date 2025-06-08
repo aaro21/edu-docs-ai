@@ -90,6 +90,9 @@ class ExportRequest(BaseModel):
 class SimpleExportRequest(BaseModel):
     page_ids: List[int]
 
+class FilesRequest(BaseModel):
+    file_names: List[str]
+
 @app.post("/upload")
 @app.post("/upload_pdf/")
 async def upload_pdf(
@@ -386,6 +389,28 @@ def get_pages_by_pdf(pdf_name: str):
             "page_number": p.page_number,
             "tags": p.tags or "",
             "vision_summary": p.vision_summary
+        }
+        for p in pages
+    ]
+
+@app.post("/pages/by-files")
+def get_pages_by_files(payload: FilesRequest):
+    session = get_session()
+    if not payload.file_names:
+        return []
+    pages = session.exec(
+        select(Page)
+        .where(Page.pdf_name.in_(payload.file_names))
+        .order_by(Page.pdf_name, Page.page_number)
+    ).all()
+    return [
+        {
+            "page_id": p.id,
+            "pdf_name": p.pdf_name,
+            "page_number": p.page_number,
+            "text": p.text,
+            "tags": p.tags or "",
+            "vision_summary": p.vision_summary,
         }
         for p in pages
     ]
