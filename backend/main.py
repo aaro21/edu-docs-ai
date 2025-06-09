@@ -9,7 +9,8 @@ import fitz  # PyMuPDF
 import numpy as np
 
 from fastapi import (
-    FastAPI, UploadFile, File, Form, Query, Body, Depends, HTTPException
+    FastAPI, UploadFile, File, Form, Query, Body, Depends, HTTPException,
+    Request
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -25,6 +26,7 @@ from faiss_index import PageIndex
 from pdf_preview import render_page_preview
 from vision import run_vision_model
 from llm_helpers import clean_text_and_generate_tags
+from auth import verify_session, load_allowed_emails
 
 
 # Ensure the preview directory exists BEFORE mounting as static
@@ -48,7 +50,7 @@ def vision_context_prompt(tags, extracted_text, extra_context=None):
     prompt += "Please summarize or describe the worksheet page for an elementary school teacher."
     return prompt
 
-app = FastAPI()
+app = FastAPI(dependencies=[Depends(verify_session)])
 
 # Serve PNG previews at /previews/*
 app.mount("/previews", StaticFiles(directory="uploads/previews"), name="previews")
@@ -65,6 +67,8 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 init_db()
+if os.environ.get("NODE_ENV") == "production":
+    load_allowed_emails()
 index = PageIndex()
 
 # Rebuild FAISS index from existing DB entries
