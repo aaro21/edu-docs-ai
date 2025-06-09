@@ -68,6 +68,23 @@ The backend expects several OpenAI related variables which can be provided via `
 - `AZURE_OPENAI_VISION_DEPLOYMENT` – vision/chat deployment name
 - `AZURE_OPENAI_API_VERSION` – API version string
 
+For authentication using Microsoft Entra ID (Azure AD) set the following in `.env`:
+- `AZURE_AD_CLIENT_ID` – Entra application (client) ID
+- `AZURE_AD_CLIENT_SECRET` – client secret
+- `AZURE_AD_TENANT_ID` – directory/tenant ID
+- `AZURE_AD_REDIRECT_URI` – OAuth redirect URL for NextAuth
+- `NEXTAUTH_SECRET` – secret used to sign JWT sessions
+- `NODE_ENV` – `production` to enforce authentication, `development` to skip it
+- `ALLOWED_EMAILS` – comma separated list of allowed user emails *(optional)*
+- `POSTGRES_URL` – connection string to a Postgres database containing an `allowed_users` table *(optional)*
+
+## 🔐 Microsoft Entra Setup
+1. Create a new **App registration** in the Azure portal.
+2. Add your callback URL (e.g. `http://localhost:3000/api/auth/callback/azure-ad`) as a **Redirect URI**.
+3. Copy the **Application (client) ID** and **Directory (tenant) ID**.
+4. Create a **Client Secret** and note the value.
+5. Set the environment variables from the list above and start the app with `NODE_ENV=production` to require sign in.
+
 ---
 
 ## 🧪 Getting Started

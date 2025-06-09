@@ -1,7 +1,10 @@
 // frontend/components/Layout.js
 import Link from 'next/link';
+import { signIn, signOut, useSession } from 'next-auth/react';
 
 export default function Layout({ children }) {
+  const { data: session } = useSession();
+  const isProd = process.env.NODE_ENV === 'production';
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-blue-600 text-white px-6 py-4 shadow">
@@ -14,6 +17,17 @@ export default function Layout({ children }) {
             <Link href="/export" className="hover:underline">Export</Link>
             <Link href="/summary" className="hover:underline">Summary</Link>
             <Link href="/admin" className="hover:underline">Admin</Link>
+            {isProd && (
+              session ? (
+                <button onClick={() => signOut()} className="ml-4 underline">
+                  Sign out
+                </button>
+              ) : (
+                <button onClick={() => signIn()} className="ml-4 underline">
+                  Sign in
+                </button>
+              )
+            )}
           </div>
         </div>
       </nav>

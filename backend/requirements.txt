@@ -7,3 +7,5 @@ requests
 python-dotenv
 faiss-cpu
 openai
+python-jose[cryptography]
+psycopg2-binary

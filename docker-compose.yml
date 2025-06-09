@@ -9,6 +9,7 @@ services:
       - ./uploads:/app/uploads
     environment:
       - PYTHONUNBUFFERED=1
+      - NODE_ENV=development
 
   frontend:
     build: ./frontend
@@ -17,5 +18,7 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
+    environment:
+      - NODE_ENV=development
     depends_on:
       - backend
